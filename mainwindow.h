@@ -4,6 +4,8 @@
 #include <QMainWindow>
 #include <QGraphicsScene>
 #include <QPoint>
+#include "sidebarpanel.h"
+#include "xmlhighlighter.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -14,6 +16,7 @@ QT_END_NAMESPACE
 class QGraphicsSvgItem;
 class QGraphicsRectItem;
 class QLineEdit;
+class QVBoxLayout;
 
 class MainWindow : public QMainWindow
 {
@@ -36,6 +39,14 @@ private:
     void updateComparisonClip();
     void repositionSliderHandle();
 
+    // Sidebar
+    void buildSidebar();
+    void buildPluginsPanel();
+    void buildOptimizePanel();
+    void buildColorsPanel();
+    void buildExportPanel();
+    void addColorEntry(const QColor &color);
+
     Ui::MainWindow *ui;
     QGraphicsScene    *m_scene;
     QGraphicsSvgItem  *m_svgItem        = nullptr;
@@ -50,5 +61,14 @@ private:
     QPoint             m_lastPanPos;
     bool               m_panning        = false;
     bool               m_draggingSlider = false;
+    QString            m_svgPath;
+
+    SidebarPanel *m_panelPlugins  = nullptr;
+    SidebarPanel *m_panelOptimize = nullptr;
+    SidebarPanel *m_panelColors   = nullptr;
+    SidebarPanel *m_panelExport   = nullptr;
+    QVBoxLayout    *m_colorsLayout      = nullptr;
+    XmlHighlighter *m_highlighterBefore = nullptr;
+    XmlHighlighter *m_highlighterAfter  = nullptr;
 };
 #endif // MAINWINDOW_H

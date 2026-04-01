@@ -17,6 +17,12 @@ set(PROJECT_SOURCES
         mainwindow.cpp
         mainwindow.h
         mainwindow.ui
+        sidebarpanel.cpp
+        sidebarpanel.h
+        exportdialog.h
+        exportdialog.cpp
+        xmlhighlighter.h
+        xmlhighlighter.cpp
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)

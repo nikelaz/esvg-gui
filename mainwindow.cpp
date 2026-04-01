@@ -1,5 +1,10 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
+#include "sidebarpanel.h"
+#include "exportdialog.h"
+#include "xmlhighlighter.h"
+#include <QFile>
+#include <QPlainTextEdit>
 #include <QtSvgWidgets/QGraphicsSvgItem>
 #include <QGraphicsRectItem>
 #include <QOpenGLWidget>
@@ -10,8 +15,18 @@
 #include <QTimer>
 #include <QFileDialog>
 #include <QHBoxLayout>
+#include <QVBoxLayout>
 #include <QPushButton>
 #include <QLineEdit>
+#include <QSplitter>
+#include <QCheckBox>
+#include <QComboBox>
+#include <QScrollArea>
+#include <QGridLayout>
+#include <QLabel>
+#include <QFrame>
+#include <QColorDialog>
+#include <QRegularExpressionValidator>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -19,6 +34,15 @@ MainWindow::MainWindow(QWidget *parent)
     , m_scene(new QGraphicsScene(this))
 {
     ui->setupUi(this);
+
+    buildSidebar();
+
+    QFont monoFont("Courier New", 9);
+    monoFont.setStyleHint(QFont::Monospace);
+    ui->codeBefore->setFont(monoFont);
+    ui->codeAfter->setFont(monoFont);
+    m_highlighterBefore = new XmlHighlighter(ui->codeBefore->document());
+    m_highlighterAfter  = new XmlHighlighter(ui->codeAfter->document());
 
     ui->svgView->setScene(m_scene);
     QSurfaceFormat format;
@@ -64,6 +88,13 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Zoom overlay
     m_zoomControls = new QWidget(ui->svgView);
+    m_zoomControls->setObjectName("zoomControls");
+    m_zoomControls->setStyleSheet(
+        "QWidget#zoomControls {"
+        "  background-color: palette(window);"
+        "  border-radius: 6px;"
+        "}"
+    );
 
     auto *zoomLayout = new QHBoxLayout(m_zoomControls);
     zoomLayout->setContentsMargins(6, 4, 6, 4);
@@ -99,6 +130,10 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     connect(ui->actionOpen, &QAction::triggered, this, &MainWindow::openFile);
+    connect(ui->actionExport, &QAction::triggered, this, [this]{
+        ExportDialog dlg(m_svgPath, this);
+        dlg.exec();
+    });
 
     ui->svgView->viewport()->setMouseTracking(true);
     ui->svgView->viewport()->installEventFilter(this);
@@ -126,6 +161,13 @@ void MainWindow::openFile()
         this, tr("Open SVG"), QString(), tr("SVG Files (*.svg)"));
     if (path.isEmpty())
         return;
+
+    m_svgPath = path;
+    ui->actionExport->setEnabled(true);
+
+    QFile f(path);
+    if (f.open(QIODevice::ReadOnly | QIODevice::Text))
+        ui->codeBefore->setPlainText(QString::fromUtf8(f.readAll()));
 
     delete m_svgItem;
 
@@ -275,4 +317,144 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
         break;
     }
     return QMainWindow::eventFilter(watched, event);
+}
+
+void MainWindow::buildSidebar()
+{
+    QSplitter *sp = ui->sidebarSplitter;
+    m_panelPlugins  = new SidebarPanel(tr("Plugins"),      sp);
+    m_panelOptimize = new SidebarPanel(tr("Optimization"), sp);
+    m_panelColors   = new SidebarPanel(tr("Colors"),       sp);
+    m_panelExport   = new SidebarPanel(tr("Quick Export"), sp);
+
+    for (auto *p : { m_panelPlugins, m_panelOptimize, m_panelColors, m_panelExport })
+        sp->addWidget(p);
+    for (int i = 0; i < sp->count(); ++i)
+        sp->setCollapsible(i, false);
+
+    buildPluginsPanel();
+    buildOptimizePanel();
+    buildColorsPanel();
+    buildExportPanel();
+
+    connect(ui->actionViewPlugins,      &QAction::toggled, m_panelPlugins,  &QWidget::setVisible);
+    connect(ui->actionViewOptimization, &QAction::toggled, m_panelOptimize, &QWidget::setVisible);
+    connect(ui->actionViewColors,       &QAction::toggled, m_panelColors,   &QWidget::setVisible);
+    connect(ui->actionViewQuickExport,  &QAction::toggled, m_panelExport,   &QWidget::setVisible);
+}
+
+void MainWindow::buildPluginsPanel()
+{
+    auto *l = new QVBoxLayout(m_panelPlugins->contentWidget());
+    l->setContentsMargins(10, 8, 10, 8);
+    l->setSpacing(4);
+    for (const QString &name : { tr("Plugin 1"), tr("Plugin 2"), tr("Plugin 3"),
+                                   tr("Plugin 4"), tr("Plugin 5") })
+        l->addWidget(new QCheckBox(name));
+    l->addStretch();
+}
+
+void MainWindow::buildOptimizePanel()
+{
+    auto *l = new QVBoxLayout(m_panelOptimize->contentWidget());
+    l->setContentsMargins(10, 8, 10, 8);
+    l->setSpacing(8);
+    auto *grid = new QGridLayout;
+    grid->setColumnStretch(1, 1);
+    int row = 0;
+    for (const QString &lbl : { tr("Original size:"), tr("Optimized size:"),
+                                  tr("Original gzip:"), tr("Optimized gzip:") }) {
+        grid->addWidget(new QLabel(lbl),    row, 0);
+        grid->addWidget(new QLabel(tr("—")), row, 1);
+        ++row;
+    }
+    l->addLayout(grid);
+    l->addStretch();
+}
+
+void MainWindow::buildColorsPanel()
+{
+    auto *l = new QVBoxLayout(m_panelColors->contentWidget());
+    l->setContentsMargins(0, 0, 0, 0);
+    l->setSpacing(0);
+
+    auto *scroll = new QScrollArea;
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setWidgetResizable(true);
+
+    auto *inner = new QWidget;
+    m_colorsLayout = new QVBoxLayout(inner);
+    m_colorsLayout->setContentsMargins(8, 6, 8, 6);
+    m_colorsLayout->setSpacing(4);
+    m_colorsLayout->addStretch();
+
+    scroll->setWidget(inner);
+    l->addWidget(scroll);
+
+    // Placeholder colors until SVG parsing is wired up
+    for (const QColor &c : { QColor("#C0392B"), QColor("#2980B9"),
+                              QColor("#27AE60"), QColor("#F39C12") })
+        addColorEntry(c);
+}
+
+void MainWindow::addColorEntry(const QColor &color)
+{
+    auto *row = new QWidget;
+    auto *hl  = new QHBoxLayout(row);
+    hl->setContentsMargins(0, 0, 0, 0);
+    hl->setSpacing(6);
+
+    auto *swatch = new QPushButton;
+    swatch->setFixedSize(24, 24);
+    swatch->setFlat(true);
+    swatch->setCursor(Qt::PointingHandCursor);
+
+    auto *hexEdit = new QLineEdit;
+    hexEdit->setFixedWidth(72);
+    hexEdit->setValidator(new QRegularExpressionValidator(
+        QRegularExpression("^#[0-9A-Fa-f]{0,6}$"), hexEdit));
+    hexEdit->setMaxLength(7);
+
+    auto updateSwatch = [swatch](const QColor &c) {
+        swatch->setStyleSheet(QString("background-color: %1; border: 1px solid palette(mid);")
+                              .arg(c.name()));
+    };
+
+    updateSwatch(color);
+    hexEdit->setText(color.name().toUpper());
+
+    connect(swatch, &QPushButton::clicked, this, [=]() mutable {
+        QColor current(hexEdit->text());
+        QColor picked = QColorDialog::getColor(current.isValid() ? current : Qt::white, this);
+        if (!picked.isValid()) return;
+        updateSwatch(picked);
+        hexEdit->setText(picked.name().toUpper());
+    });
+
+    connect(hexEdit, &QLineEdit::textEdited, this, [=](const QString &text) {
+        if (text.length() == 7) {
+            QColor c(text);
+            if (c.isValid()) updateSwatch(c);
+        }
+    });
+
+    hl->addWidget(swatch);
+    hl->addWidget(hexEdit);
+    hl->addStretch();
+
+    // Insert before the trailing stretch
+    m_colorsLayout->insertWidget(m_colorsLayout->count() - 1, row);
+}
+
+void MainWindow::buildExportPanel()
+{
+    auto *l = new QVBoxLayout(m_panelExport->contentWidget());
+    l->setContentsMargins(10, 8, 10, 8);
+    l->setSpacing(8);
+    l->addWidget(new QLabel(tr("Format / Preset:")));
+    auto *combo = new QComboBox;
+    combo->addItems({ tr("SVG"), tr("PNG"), tr("PDF") });
+    l->addWidget(combo);
+    l->addWidget(new QPushButton(tr("Export")));
+    l->addStretch();
 }
