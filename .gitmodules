@@ -1,0 +1,3 @@
+[submodule "vendor/esvg-rs"]
+	path = vendor/esvg-rs
+	url = git@github.com:nikelaz/esvg-rs.git
