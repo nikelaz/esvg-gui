@@ -9,8 +9,42 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets OpenGLWidgets Svg SvgWidgets)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets OpenGLWidgets Svg SvgWidgets)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets OpenGLWidgets Svg SvgWidgets Concurrent)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets OpenGLWidgets Svg SvgWidgets Concurrent)
+
+# ---- esvg-rs static library (Rust) ----
+find_program(CARGO_EXECUTABLE cargo
+    HINTS "$ENV{USERPROFILE}/.cargo/bin" "$ENV{HOME}/.cargo/bin"
+    REQUIRED
+)
+
+set(ESVG_RS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vendor/esvg-rs")
+set(ESVG_RS_TARGET "x86_64-pc-windows-gnu")
+
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    set(ESVG_RS_BUILD_DIR "${ESVG_RS_DIR}/target/${ESVG_RS_TARGET}/release")
+    set(ESVG_RS_CARGO_FLAG "--release")
+else()
+    set(ESVG_RS_BUILD_DIR "${ESVG_RS_DIR}/target/${ESVG_RS_TARGET}/debug")
+    set(ESVG_RS_CARGO_FLAG "")
+endif()
+
+set(ESVG_RS_LIB "${ESVG_RS_BUILD_DIR}/libesvg_rs.a")
+
+file(GLOB_RECURSE ESVG_RS_SOURCES "${ESVG_RS_DIR}/src/*.rs" "${ESVG_RS_DIR}/Cargo.toml")
+
+add_custom_command(
+    OUTPUT  "${ESVG_RS_LIB}"
+    COMMAND "${CARGO_EXECUTABLE}" build --target ${ESVG_RS_TARGET} --features ffi ${ESVG_RS_CARGO_FLAG}
+    WORKING_DIRECTORY "${ESVG_RS_DIR}"
+    DEPENDS ${ESVG_RS_SOURCES}
+    COMMENT "Building esvg-rs (${ESVG_RS_TARGET})"
+    VERBATIM
+)
+add_custom_target(esvg_rs_build DEPENDS "${ESVG_RS_LIB}")
+
+add_library(esvg_rs STATIC IMPORTED GLOBAL)
+set_target_properties(esvg_rs PROPERTIES IMPORTED_LOCATION "${ESVG_RS_LIB}")
 
 set(PROJECT_SOURCES
         main.cpp
@@ -21,8 +55,6 @@ set(PROJECT_SOURCES
         sidebarpanel.h
         exportdialog.h
         exportdialog.cpp
-        xmlhighlighter.h
-        xmlhighlighter.cpp
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
@@ -53,11 +85,18 @@ qt_add_resources(esvg-gui "svgs"
     FILES test-svg.svg
 )
 
+target_include_directories(esvg-gui PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/vendor/esvg-rs/include"
+)
+
 target_link_libraries(esvg-gui PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::OpenGLWidgets
     Qt${QT_VERSION_MAJOR}::Svg
     Qt${QT_VERSION_MAJOR}::SvgWidgets
+    Qt${QT_VERSION_MAJOR}::Concurrent
+    esvg_rs
+    ws2_32 ntdll bcrypt userenv
 )
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
@@ -84,3 +123,5 @@ install(TARGETS esvg-gui
 if(QT_VERSION_MAJOR EQUAL 6)
     qt_finalize_executable(esvg-gui)
 endif()
+
+add_dependencies(esvg-gui esvg_rs_build)

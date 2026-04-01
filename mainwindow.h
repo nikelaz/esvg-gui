@@ -4,8 +4,11 @@
 #include <QMainWindow>
 #include <QGraphicsScene>
 #include <QPoint>
+#include <QByteArray>
+#include <QCheckBox>
+#include <QSlider>
 #include "sidebarpanel.h"
-#include "xmlhighlighter.h"
+#include "esvg_rs.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -15,6 +18,8 @@ QT_END_NAMESPACE
 
 class QGraphicsSvgItem;
 class QGraphicsRectItem;
+class QSvgRenderer;
+class QLabel;
 class QLineEdit;
 class QVBoxLayout;
 
@@ -31,6 +36,7 @@ protected:
 
 private slots:
     void openFile();
+    void reoptimize();
 
 private:
     void applyZoom(double factor);
@@ -51,6 +57,7 @@ private:
     QGraphicsScene    *m_scene;
     QGraphicsSvgItem  *m_svgItem        = nullptr;
     QGraphicsSvgItem  *m_svgItemB       = nullptr;
+    QSvgRenderer      *m_rendererB      = nullptr;
     QGraphicsRectItem *m_clipContainerA = nullptr;
     QGraphicsRectItem *m_clipContainer  = nullptr;
     QWidget           *m_zoomControls   = nullptr;
@@ -62,13 +69,19 @@ private:
     bool               m_panning        = false;
     bool               m_draggingSlider = false;
     QString            m_svgPath;
+    QByteArray         m_svgBytes;
+    bool               m_optimizing     = false;
+    QCheckBox         *m_pluginChecks[ESVG_PLUGIN_COUNT] = {};
+    QSlider           *m_precisionSlider = nullptr;
 
     SidebarPanel *m_panelPlugins  = nullptr;
     SidebarPanel *m_panelOptimize = nullptr;
     SidebarPanel *m_panelColors   = nullptr;
     SidebarPanel *m_panelExport   = nullptr;
     QVBoxLayout    *m_colorsLayout      = nullptr;
-    XmlHighlighter *m_highlighterBefore = nullptr;
-    XmlHighlighter *m_highlighterAfter  = nullptr;
+    QLabel *m_labelOrigSize = nullptr;
+    QLabel *m_labelOptSize  = nullptr;
+    QLabel *m_labelOrigGzip = nullptr;
+    QLabel *m_labelOptGzip  = nullptr;
 };
 #endif // MAINWINDOW_H
