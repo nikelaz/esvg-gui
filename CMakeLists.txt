@@ -2,15 +2,14 @@ cmake_minimum_required(VERSION 3.16)
 
 project(esvg-gui VERSION 0.1 LANGUAGES CXX)
 
-set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets OpenGLWidgets Svg SvgWidgets Concurrent)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets OpenGLWidgets Svg SvgWidgets Concurrent)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Quick QuickControls2 Svg SvgWidgets Concurrent)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Quick QuickControls2 Svg SvgWidgets Concurrent)
 
 # ---- esvg-rs static library (Rust) ----
 find_program(CARGO_EXECUTABLE cargo
@@ -46,36 +45,28 @@ add_custom_target(esvg_rs_build DEPENDS "${ESVG_RS_LIB}")
 add_library(esvg_rs STATIC IMPORTED GLOBAL)
 set_target_properties(esvg_rs PROPERTIES IMPORTED_LOCATION "${ESVG_RS_LIB}")
 
-set(PROJECT_SOURCES
-        main.cpp
-        mainwindow.cpp
-        mainwindow.h
-        mainwindow.ui
-        sidebarpanel.cpp
-        sidebarpanel.h
-        exportdialog.h
-        exportdialog.cpp
-)
-
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     qt_add_executable(esvg-gui
         MANUAL_FINALIZATION
-        ${PROJECT_SOURCES}
+        main.cpp
+        optimizationcontroller.h optimizationcontroller.cpp
+        svgcompareitem.h svgcompareitem.cpp
+        exportcontroller.h exportcontroller.cpp
     )
-# Define target properties for Android with Qt 6 as:
-#    set_property(TARGET ESVGGui APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR
-#                 ${CMAKE_CURRENT_SOURCE_DIR}/android)
-# For more information, see https://doc.qt.io/qt-6/qt-add-executable.html#target-creation
 else()
     if(ANDROID)
         add_library(esvg-gui SHARED
-            ${PROJECT_SOURCES}
+            main.cpp
+            optimizationcontroller.h optimizationcontroller.cpp
+            svgcompareitem.h svgcompareitem.cpp
+            exportcontroller.h exportcontroller.cpp
         )
-# Define properties for Android with Qt 5 after find_package() calls as:
-#    set(ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android")
     else()
         add_executable(esvg-gui
-            ${PROJECT_SOURCES}
+            main.cpp
+            optimizationcontroller.h optimizationcontroller.cpp
+            svgcompareitem.h svgcompareitem.cpp
+            exportcontroller.h exportcontroller.cpp
         )
     endif()
 endif()
@@ -85,13 +76,31 @@ qt_add_resources(esvg-gui "svgs"
     FILES test-svg.svg
 )
 
+qt_add_qml_module(esvg-gui
+    URI EsvgGui
+    VERSION 1.0
+    QML_FILES
+        qml/Main.qml
+        qml/VisualTab.qml
+        qml/CodeTab.qml
+        qml/Sidebar.qml
+        qml/SidebarPanel.qml
+        qml/PluginsPanel.qml
+        qml/OptimizePanel.qml
+        qml/ColorsPanel.qml
+        qml/ExportPanel.qml
+        qml/ExportDialog.qml
+        qml/ZoomOverlay.qml
+)
+
 target_include_directories(esvg-gui PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/vendor/esvg-rs/include"
 )
 
 target_link_libraries(esvg-gui PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets
-    Qt${QT_VERSION_MAJOR}::OpenGLWidgets
+    Qt${QT_VERSION_MAJOR}::Quick
+    Qt${QT_VERSION_MAJOR}::QuickControls2
     Qt${QT_VERSION_MAJOR}::Svg
     Qt${QT_VERSION_MAJOR}::SvgWidgets
     Qt${QT_VERSION_MAJOR}::Concurrent
@@ -99,9 +108,6 @@ target_link_libraries(esvg-gui PRIVATE
     ws2_32 ntdll bcrypt userenv
 )
 
-# Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
-# If you are developing for iOS or macOS you should consider setting an
-# explicit, fixed bundle identifier manually though.
 if(${QT_VERSION} VERSION_LESS 6.1.0)
   set(BUNDLE_ID_OPTION MACOSX_BUNDLE_GUI_IDENTIFIER com.example.esvg-gui)
 endif()
